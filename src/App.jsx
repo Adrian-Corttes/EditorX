@@ -246,7 +246,24 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
         break;
       default:
         if (e.key.length === 1) {
-          lines[line] = lines[line].slice(0, char) + e.key + lines[line].slice(char);
+          let charToInsert = e.key;
+
+          const numToLetter = {
+            '1': 'A',
+            '2': 'B',
+            '3': 'C',
+            '4': 'D',
+            '5': 'E',
+            '6': 'F',
+            '7': 'G',
+            '8': 'H'
+          };
+
+          if (numToLetter[charToInsert]) {
+            charToInsert = numToLetter[charToInsert];
+          }
+
+          lines[line] = lines[line].slice(0, char) + charToInsert + lines[line].slice(char);
           char++;
           contentChanged = true;
         }
@@ -274,8 +291,6 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
               return updated;
             });
             setCurrentFileIndex(openedFiles.length);
-
-            // ✅ Inicializa historial
             setHistory([newContent]);
             setHistoryIndex(0);
           };
