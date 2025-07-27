@@ -122,15 +122,17 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
 
   const currentFile = openedFiles[currentFileIndex];
 
-  const updateContentAndHistory = (newContent) => {
+  const updateContentAndHistory = (newContent, addToHistory = true) => {
     const newFiles = [...openedFiles];
     newFiles[currentFileIndex] = { ...currentFile, content: newContent };
     setOpenedFiles(newFiles);
 
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(newContent);
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
+    if (addToHistory && history[historyIndex] !== newContent) {
+      const newHistory = history.slice(0, historyIndex + 1);
+      newHistory.push(newContent);
+      setHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
+    }
   };
 
   useEffect(() => {
@@ -190,7 +192,7 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
       if (historyIndex > 0) {
         const newIndex = historyIndex - 1;
         setHistoryIndex(newIndex);
-        updateContentAndHistory(history[newIndex]);
+        updateContentAndHistory(history[newIndex], false);
       }
       return;
     }
@@ -200,7 +202,7 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
       if (historyIndex < history.length - 1) {
         const newIndex = historyIndex + 1;
         setHistoryIndex(newIndex);
-        updateContentAndHistory(history[newIndex]);
+        updateContentAndHistory(history[newIndex], false);
       }
       return;
     }
@@ -272,6 +274,10 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
               return updated;
             });
             setCurrentFileIndex(openedFiles.length);
+
+            // ✅ Inicializa historial
+            setHistory([newContent]);
+            setHistoryIndex(0);
           };
           reader.readAsText(file);
         } else {
