@@ -12,7 +12,7 @@ import { File, Files, GitBranch, Search, X, ChevronRight, ReplaceAll } from 'luc
 // Función de utilidad para "escapar" caracteres especiales en un string.
 // Esto es crucial para que un texto de búsqueda del usuario pueda ser usado de forma segura en una Expresión Regular (RegExp).
 function escapeRegExp(string) {
-  // Reemplaza cada carácter especial de RegExp (como ., *, +, etc.) con una versión escapada (ej. \. \* \+).
+  // Reemplaza cada carácter especial de RegExp (como ., *, +, ?, etc.) con una versión escapada (ej. \. \* \+).
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
@@ -200,34 +200,24 @@ const getLetterStartIndex = (line, separator = ';') => {
 
 // Componente para renderizar un único carácter en el editor.
 // React.memo es una optimización que evita que el componente se re-renderice si sus props no cambian.
-const Character = React.memo(({ char, charIndex, isHighlighted, isSelected, isCursorAfter, showTooltip, tooltipContent, onMouseEnter }) => {
-    // Determina el estilo de fondo. La selección (azul) tiene prioridad sobre el resaltado de búsqueda (morado).
-    const backgroundClass = isSelected
-      ? 'bg-blue-400 bg-opacity-70'
-      : isHighlighted
-      ? 'bg-indigo-500 bg-opacity-70'
-      : '';
-
-    return (
-        <span
-          data-char-index={charIndex} // Atributo de datos para identificar el índice del carácter.
-          className={`relative ${backgroundClass}`}
-          onMouseEnter={onMouseEnter} // Evento para cuando el ratón entra en el carácter.
-        >
-          {/* Muestra un tooltip si la prop showTooltip es verdadera. */}
-          {showTooltip && (
-            <div className="absolute bottom-full left-1/2 mb-1 transform -translate-x-1/2 px-1 py-0.5 bg-gray-800 text-white text-xs rounded z-50 whitespace-nowrap">
-              {tooltipContent}
-            </div>
-          )}
-          {/* El carácter en sí. */}
-          {char}
-          {/* Muestra el cursor parpadeante si la prop isCursorAfter es verdadera. */}
-          {isCursorAfter && <span className="blinking-cursor">|</span>}
-        </span>
-    );
-});
-
+const Character = React.memo(({ char, charIndex, isHighlighted, isCursorAfter, showTooltip, tooltipContent, onMouseEnter }) => (
+    <span
+      data-char-index={charIndex} // Atributo de datos para identificar el índice del carácter.
+      className={`relative ${isHighlighted ? 'bg-indigo-500 bg-opacity-70' : ''}`}
+      onMouseEnter={onMouseEnter} // Evento para cuando el ratón entra en el carácter.
+    >
+      {/* Muestra un tooltip si la prop showTooltip es verdadera. */}
+      {showTooltip && (
+        <div className="absolute bottom-full left-1/2 mb-1 transform -translate-x-1/2 px-1 py-0.5 bg-gray-800 text-white text-xs rounded z-50 whitespace-nowrap">
+          {tooltipContent}
+        </div>
+      )}
+      {/* El carácter en sí. */}
+      {char}
+      {/* Muestra el cursor parpadeante si la prop isCursorAfter es verdadera. */}
+      {isCursorAfter && <span className="blinking-cursor">|</span>}
+    </span>
+));
 
 // El componente principal del editor de texto.
 const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileIndex, setNotification }) => {
@@ -243,8 +233,6 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
   const [hoveredPosition, setHoveredPosition] = useState(null);
   // Estado para la posición del cursor de texto (línea y carácter).
   const [cursorPosition, setCursorPosition] = useState({ line: 0, char: 0 });
-  // **NUEVO:** Estado para el rango de texto seleccionado. `null` si no hay selección.
-  const [selection, setSelection] = useState(null); // Formato: { start: { line, char }, end: { line, char } }
   // Estado para el historial de cambios (para deshacer/rehacer).
   const [history, setHistory] = useState([]);
   // Índice actual en el historial de cambios.
@@ -282,7 +270,6 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
       setHistory([]); // Si no hay archivo, vacía el historial.
       setHistoryIndex(-1);
     }
-    setSelection(null); // Limpia la selección al cambiar de archivo.
   }, [currentFileIndex, currentFile?.name]); // Dependencias: se ejecuta si cambian.
 
 
@@ -322,34 +309,7 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
     }
   }, [searchQuery, currentFile]); // Dependencias: se ejecuta si cambian.
 
-  // **NUEVO:** Función que normaliza un rango de selección para asegurar que `start` siempre va antes que `end`.
-  const normalizeRange = (start, end) => {
-    if (start.line > end.line || (start.line === end.line && start.char > end.char)) {
-      return { start: end, end: start };
-    }
-    return { start, end };
-  };
-
-  // **NUEVO:** Función que obtiene el texto actualmente seleccionado.
-  const getSelectedText = useCallback(() => {
-    if (!selection || !currentFile) return '';
-    const lines = currentFile.content.split('\n');
-    const { start, end } = normalizeRange(selection.start, selection.end);
-
-    if (start.line === end.line) {
-      return lines[start.line].substring(start.char, end.char);
-    }
-
-    let text = '';
-    text += lines[start.line].substring(start.char);
-    for (let i = start.line + 1; i < end.line; i++) {
-      text += '\n' + lines[i];
-    }
-    text += '\n' + lines[end.line].substring(0, end.char);
-    return text;
-  }, [selection, currentFile]);
-
-  // Función que determina si un carácter en una posición específica debe ser resaltado por búsqueda.
+  // Función que determina si un carácter en una posición específica debe ser resaltado.
   const isHighlighted = (lineIndex, charIndex) => {
     if (searchQuery.length === 0) return false; // Si no hay búsqueda, no resalta nada.
     // Devuelve true si alguna de las coincidencias en 'searchResults' incluye esta posición.
@@ -357,22 +317,6 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
       result.line === lineIndex && charIndex >= result.start && charIndex < result.end
     );
   };
-
-  // **NUEVO:** Función que determina si un carácter está dentro del rango de selección actual.
-  const isInSelection = useCallback((lineIndex, charIndex) => {
-    if (!selection) return false;
-    const { start, end } = normalizeRange(selection.start, selection.end);
-    
-    const pos = { line: lineIndex, char: charIndex };
-
-    // Comprueba si la posición está después del inicio de la selección.
-    const isAfterStart = pos.line > start.line || (pos.line === start.line && pos.char >= start.char);
-    // Comprueba si la posición está antes del final de la selección.
-    const isBeforeEnd = pos.line < end.line || (pos.line === end.line && pos.char < end.char);
-
-    return isAfterStart && isBeforeEnd;
-  }, [selection]);
-
 
   // Lógica para reemplazar todas las coincidencias encontradas.
   const handleReplaceAll = () => {
@@ -407,76 +351,6 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
   const handleKeyDown = (e) => {
     if (!currentFile) return; // No hace nada si no hay un archivo abierto.
     
-    // **NUEVO:** Atajo Ctrl+A (o Cmd+A) para seleccionar todo el texto.
-    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-      e.preventDefault();
-      const lines = currentFile.content.split('\n');
-      const lastLine = lines.length - 1;
-      const lastChar = lines[lastLine].length;
-      setSelection({
-        start: { line: 0, char: 0 },
-        end: { line: lastLine, char: lastChar }
-      });
-      // Mueve el cursor al final de la selección.
-      setCursorPosition({ line: lastLine, char: lastChar });
-      return;
-    }
-
-    // **NUEVO:** Atajo Ctrl+C (o Cmd+C) para copiar.
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-      e.preventDefault();
-      const selectedText = getSelectedText();
-      if (selectedText) {
-        navigator.clipboard.writeText(selectedText)
-          .then(() => setNotification({ message: 'Texto copiado.', type: 'success' }))
-          .catch(() => setNotification({ message: 'Error al copiar texto.', type: 'error' }));
-      }
-      return;
-    }
-
-    // **NUEVO:** Atajo Ctrl+V (o Cmd+V) para pegar.
-    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-      e.preventDefault();
-      navigator.clipboard.readText().then(textToPaste => {
-        if (!textToPaste) return;
-        
-        let lines = currentFile.content.split('\n');
-        let startPos = cursorPosition;
-
-        // Si hay una selección, se elimina primero.
-        if (selection) {
-          const { start, end } = normalizeRange(selection.start, selection.end);
-          startPos = start;
-          const pre = lines[start.line].substring(0, start.char);
-          const post = lines[end.line].substring(end.char);
-          lines.splice(start.line, end.line - start.line + 1, pre + post);
-        }
-
-        const pasteLines = textToPaste.split('\n');
-        const currentLine = lines[startPos.line];
-        const prePaste = currentLine.substring(0, startPos.char);
-        const postPaste = currentLine.substring(startPos.char);
-
-        // Si el texto a pegar es de una sola línea.
-        if (pasteLines.length === 1) {
-          lines[startPos.line] = prePaste + pasteLines[0] + postPaste;
-        } else { // Si es multilínea.
-          lines[startPos.line] = prePaste + pasteLines[0];
-          lines.splice(startPos.line + 1, 0, ...pasteLines.slice(1));
-          lines[startPos.line + pasteLines.length - 1] += postPaste;
-        }
-
-        // Calcula la nueva posición del cursor.
-        const newCursorLine = startPos.line + pasteLines.length - 1;
-        const newCursorChar = (pasteLines.length === 1 ? startPos.char : 0) + pasteLines[pasteLines.length - 1].length;
-
-        updateContentAndHistory(lines.join('\n'));
-        setCursorPosition({ line: newCursorLine, char: newCursorChar });
-        setSelection(null); // Limpia la selección después de pegar.
-      });
-      return;
-    }
-
     // Atajo Ctrl+H (o Cmd+H) para la búsqueda (actualmente no hace nada visible, es una mejora futura).
     if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
         e.preventDefault();
@@ -520,11 +394,6 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
 
     if (!cursorPosition || currentFile.content === null) return;
 
-    // Si se presiona una tecla de movimiento, se limpia la selección (a menos que sea Shift).
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) && !e.shiftKey) {
-        setSelection(null);
-    }
-
     const lines = currentFile.content.split('\n'); // Obtiene las líneas del contenido.
     let { line, char } = cursorPosition; // Desestructura la posición actual del cursor.
 
@@ -544,17 +413,10 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
       case 'Home': char = 0; break;
       case 'End': char = lines[line].length; break;
       case 'Backspace':
-        if (selection) { // Si hay selección, la borra.
-            const { start, end } = normalizeRange(selection.start, selection.end);
-            const pre = lines[start.line].substring(0, start.char);
-            const post = lines[end.line].substring(end.char);
-            lines.splice(start.line, end.line - start.line + 1, pre + post);
-            line = start.line; char = start.char;
-            setSelection(null);
-        } else if (char > 0) { // Si no hay selección y el cursor no está al principio.
+        if (char > 0) { // Si el cursor no está al principio de la línea.
           lines[line] = lines[line].slice(0, char - 1) + lines[line].slice(char); // Borra el carácter anterior.
           char--;
-        } else if (line > 0) { // Si está al principio de la línea.
+        } else if (line > 0) { // Si está al principio de la línea y no es la primera línea.
           char = lines[line - 1].length; // Mueve el cursor al final de la línea anterior.
           lines[line - 1] += lines[line]; // Une la línea actual con la anterior.
           lines.splice(line, 1); // Elimina la línea actual.
@@ -563,15 +425,6 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
         contentChanged = true;
         break;
       case 'Enter':
-        // La lógica de Enter también debería reemplazar la selección si existe.
-        if (selection) {
-            const { start, end } = normalizeRange(selection.start, selection.end);
-            const pre = lines[start.line].substring(0, start.char);
-            const post = lines[end.line].substring(end.char);
-            lines.splice(start.line, end.line - start.line + 1, pre + post);
-            line = start.line; char = start.char;
-            setSelection(null);
-        }
         const after = lines[line].slice(char); // El texto después del cursor.
         lines[line] = lines[line].slice(0, char); // El texto antes del cursor.
         lines.splice(line + 1, 0, after); // Inserta una nueva línea con el texto de después.
@@ -581,17 +434,8 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
       default:
         // Si es una tecla imprimible y no se está presionando Ctrl/Cmd.
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-          if (selection) { // Si hay selección, la reemplaza con la tecla presionada.
-              const { start, end } = normalizeRange(selection.start, selection.end);
-              const pre = lines[start.line].substring(0, start.char);
-              const post = lines[end.line].substring(end.char);
-              lines.splice(start.line, end.line - start.line + 1, pre + e.key + post);
-              line = start.line; char = start.char + 1;
-              setSelection(null);
-          } else {
-              lines[line] = lines[line].slice(0, char) + e.key + lines[line].slice(char); // Inserta el carácter.
-              char++;
-          }
+          lines[line] = lines[line].slice(0, char) + e.key + lines[line].slice(char); // Inserta el carácter.
+          char++;
           contentChanged = true;
         }
     }
@@ -759,15 +603,14 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
                       });
                       
                       setCursorPosition({ line: lineIndex, char: closest.index });
-                      setSelection(null); // Limpia la selección al hacer clic.
                     }}
                   >
                     {/* Muestra el cursor al principio de la línea si corresponde. */}
-                    {cursorPosition?.line === lineIndex && cursorPosition.char === 0 && !selection && <span className="blinking-cursor">|</span>}
+                    {cursorPosition?.line === lineIndex && cursorPosition.char === 0 && <span className="blinking-cursor">|</span>}
                     {/* Mapea cada carácter de la línea al componente Character. */}
                     {line.split('').map((char, charIndex) => {
                         const isHovered = hoveredPosition?.line === lineIndex && hoveredPosition?.char === charIndex;
-                        const isCursorAfter = cursorPosition?.line === lineIndex && cursorPosition.char === charIndex + 1 && !selection;
+                        const isCursorAfter = cursorPosition?.line === lineIndex && cursorPosition.char === charIndex + 1;
                         const showTooltip = (isHovered || isCursorAfter) && charIndex >= letterStartIndex;
                         
                         return (
@@ -776,7 +619,6 @@ const Editor = ({ openedFiles, currentFileIndex, setOpenedFiles, setCurrentFileI
                              char={char}
                              charIndex={charIndex}
                              isHighlighted={isHighlighted(lineIndex, charIndex)}
-                             isSelected={isInSelection(lineIndex, charIndex)}
                              isCursorAfter={isCursorAfter}
                              showTooltip={showTooltip}
                              tooltipContent={charIndex - letterStartIndex + 1}
